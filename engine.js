@@ -63,8 +63,8 @@
     } else {
       segments.push({kind:"station",title:block.movie.title,videoId:"",cleared:false,sourceStart:0,stationStart:0,duration:Math.min(runtime,block.blockSeconds)});
     }
-    if (runtime < block.blockSeconds) {
-      segments.push({kind:"station",title:"NBC station break · next program soon",videoId:"",cleared:true,sourceStart:0,stationStart:runtime,duration:block.blockSeconds-runtime});
+    if (runtime < block.blockSeconds && block.movie.videoId && block.movie.cleared) {
+      segments.push({kind:"program",title:block.movie.title,videoId:block.movie.videoId,cleared:true,sourceStart:0,stationStart:runtime,duration:block.blockSeconds-runtime});
     }
     return segments;
   }
