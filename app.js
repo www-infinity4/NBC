@@ -3,6 +3,7 @@
   const engine=window.NBCEngine;
   const programs=window.NBC_PROGRAMS;
   const template=window.NBC_DAY_TEMPLATE;
+  const DISPLAY_TIME_ZONE=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
   const $=id=>document.getElementById(id);
   const els={
     clock:$("stationClock"),mode:$("modeLabel"),title:$("nowTitle"),programTime:$("programTime"),
@@ -39,17 +40,18 @@
     if(key!==scheduleKey){scheduleKey=key;schedule=buildSchedule(nowMs);renderGuide();}
   }
 
-  function formatStationTime(ms){return new Intl.DateTimeFormat("en-US",{timeZone:engine.TIME_ZONE,hour:"numeric",minute:"2-digit"}).format(new Date(ms));}
+  function formatLocalTime(ms){return new Intl.DateTimeFormat("en-US",{timeZone:DISPLAY_TIME_ZONE,hour:"numeric",minute:"2-digit"}).format(new Date(ms));}
+  function formatBroadcastTime(ms){return new Intl.DateTimeFormat("en-US",{timeZone:engine.TIME_ZONE,hour:"numeric",minute:"2-digit",timeZoneName:"short"}).format(new Date(ms));}
   function formatDuration(seconds){const mins=Math.max(0,Math.ceil(seconds/60));return mins>=60?`${Math.floor(mins/60)}h ${mins%60}m`:`${mins} min`;}
   function programHue(item){let hash=0;for(const c of item.title)hash=((hash<<5)-hash+c.charCodeAt(0))|0;return Math.abs(hash)%360;}
   function artFor(item){if(item.posterUrl)return item.posterUrl;if(item.videoId)return `https://i.ytimg.com/vi/${item.videoId}/maxresdefault.jpg`;return "assets/channel-share.png";}
   function setProgramArt(item){document.body.style.setProperty("--program-hue",programHue(item));document.body.style.setProperty("--program-art",`url("${artFor(item)}")`);}
-  function isMovie(item){return /movie|universal pictures/i.test(item.movie.collection||"");}
+  function isMovie(item){return /movie|universal pictures/i.test(item.collection||"");}
 
   function renderGuide(){
     if(!schedule.length)return;
-    els.guideDate.textContent=new Intl.DateTimeFormat("en-US",{timeZone:engine.TIME_ZONE,weekday:"long",month:"long",day:"numeric"}).format(new Date(schedule[0].startsAtMs));
-    els.guide.innerHTML=schedule.map(item=>`<article class="guide-row ${isMovie(item)?"movie-row":""}" data-id="${item.id}"><time>${formatStationTime(item.startsAtMs)}</time><strong>${item.movie.title}</strong><span>${item.movie.year} · ${item.movie.collection}</span></article>`).join("");
+    els.guideDate.textContent=new Intl.DateTimeFormat("en-US",{timeZone:DISPLAY_TIME_ZONE,weekday:"long",month:"long",day:"numeric"}).format(new Date(schedule[0].startsAtMs));
+    els.guide.innerHTML=schedule.map(item=>`<article class="guide-row ${isMovie(item.movie)?"movie-row":""}" data-id="${item.id}"><time>${formatLocalTime(item.startsAtMs)}</time><strong>${item.movie.title}</strong><span>${item.movie.year} · ${item.movie.collection}</span></article>`).join("");
   }
 
   function renderNext(currentBlock){
@@ -57,15 +59,15 @@
     els.next.innerHTML=[1,2,3].map(step=>{
       const item=schedule[Math.min(schedule.length-1,currentIndex+step)];
       const art=artFor(item.movie).replace(/"/g,"%22");
-      return `<article class="next-card" style="--card-hue:${programHue(item.movie)};--card-art:url('${art}')"><time>${formatStationTime(item.startsAtMs)}</time><div><h3>${item.movie.title}</h3><p>${item.movie.collection}</p></div></article>`;
+      return `<article class="next-card" style="--card-hue:${programHue(item.movie)};--card-art:url('${art}')"><time>${formatLocalTime(item.startsAtMs)}</time><div><h3>${item.movie.title}</h3><p>${item.movie.collection}</p></div></article>`;
     }).join("");
   }
 
   function showStationCard(state,message){
     els.stationCard.hidden=false;
-    els.cardLabel.textContent=isMovie(state.block)?"NBCUNIVERSAL MOVIE SPOTLIGHT":"NBC NETWORK";
+    els.cardLabel.textContent=isMovie(state.block.movie)?"NBCUNIVERSAL MOVIE":"NBC NETWORK";
     els.cardTitle.textContent=state.segment.title;
-    els.cardCountdown.textContent=message||(state.segment.cleared?`${formatDuration(state.segmentRemaining)} until the next program`:"Finding another official NBC source…");
+    els.cardCountdown.textContent=message||(state.segment.cleared?`${formatDuration(state.segmentRemaining)} until the next scheduled program`:"Finding another full-program source…");
   }
 
   function clearStartupTimer(){if(startupTimer){clearTimeout(startupTimer);startupTimer=0;}}
@@ -107,11 +109,11 @@
     const state=engine.resolve(now,schedule);
     const liveSchedule=buildSchedule(Date.now());
     const liveState=engine.resolve(Date.now(),liveSchedule);
-    els.clock.textContent=`${formatStationTime(Date.now())} local`;
+    els.clock.textContent=`${formatLocalTime(Date.now())} local · ${formatBroadcastTime(Date.now())} broadcast`;
     els.mode.textContent=mode==="live"?"LIVE NBC":"TIME SHIFTED";
     els.title.textContent=state.block.movie.title;setProgramArt(state.block.movie);
-    els.programTime.textContent=`${formatStationTime(state.block.startsAtMs)}–${formatStationTime(state.block.endsAtMs)}`;
-    els.position.textContent=mode==="live"?"Synced with the viewer’s local NBC channel clock":`${formatDuration(state.blockElapsed)} from start`;
+    els.programTime.textContent=`${formatLocalTime(state.block.startsAtMs)}–${formatLocalTime(state.block.endsAtMs)} local`;
+    els.position.textContent=mode==="live"?"Synced to the shared NBC broadcast clock":`${formatDuration(state.blockElapsed)} from start`;
     els.remaining.textContent=`${formatDuration(state.blockRemaining)} remaining in slot`;
     els.progress.style.width=`${Math.min(100,(state.blockElapsed/state.block.blockSeconds)*100)}%`;
     document.querySelectorAll(".guide-row").forEach(row=>row.classList.toggle("current",row.dataset.id===state.block.id));
@@ -144,7 +146,7 @@
 
   async function shareChannel(){
     const title=els.title.textContent&&!els.title.textContent.includes("Loading")?els.title.textContent:document.title;
-    const share={title:`${title} · NBC Infinity Channel`,text:`Watch ${title} on the NBC Infinity channel. NBC/NBCUniversal programming all day.`,url:location.href};
+    const share={title:`${title} · NBC Infinity Channel`,text:`Watch ${title} on the synchronized NBC Infinity channel.`,url:location.href};
     if(!navigator.share){try{await navigator.clipboard.writeText(share.url);els.shareStatus.textContent="Link copied. Open Android Share to earn 1/10 StarCoin.";}catch(_){els.shareStatus.textContent="Sharing is unavailable in this browser.";}return;}
     try{await navigator.share(share);const result=localShareCredit(share.url);els.shareStatus.textContent=result.awarded?"Shared · 1 StarCoin completed!":`Shared · StarCoin progress ${result.progressToNextCoin}/10`;}catch(error){if(!error||error.name!=="AbortError")els.shareStatus.textContent="Share did not complete.";}
   }
