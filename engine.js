@@ -3,7 +3,7 @@
 
   // One station clock for every viewer. Display code may show local times,
   // but schedule selection and playback position are anchored to Central time.
-  const TIME_ZONE = "America/Chicago";
+  const TIME_ZONE = (Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago");
 
   function stationParts(date) {
     const parts = new Intl.DateTimeFormat("en-US", {
@@ -54,7 +54,9 @@
 
   function pickChoice(choices, key, index) {
     if (!choices.length) return null;
-    return choices[hash(`${key}:${index}`) % choices.length];
+    const dateParts = String(key).split("-").map(Number);
+    const dayNumber = Math.floor(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2]) / 86400000);
+    return choices[((dayNumber + index) % choices.length + choices.length) % choices.length];
   }
 
   function createDaySchedule(nowMs, programs, template) {
